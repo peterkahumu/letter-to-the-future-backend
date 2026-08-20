@@ -34,6 +34,9 @@ async def create_letter(
         sender_name=payload.sender_name,
         subject=payload.subject,
         body=payload.body,
+        media_url=payload.media_url,
+        is_public=payload.is_public,
+        is_anonymous=payload.is_anonymous,
         deliver_at=payload.deliver_at,
     )
     db.add(letter)
@@ -60,6 +63,50 @@ async def get_letter(
             detail="Letter not found.",
         )
     return letter
+
+
+@router.get(
+    "/feed/public",
+    response_model=list[LetterResponse],
+    summary="Get public letters",
+)
+async def get_public_letters(db: AsyncSession = Depends(get_db)):
+    """Retrieve all letters that are marked public and have been delivered."""
+    result = await db.execute(
+        select(Letter)
+        .where(Letter.is_public == True)
+        .where(Letter.is_sent == True)
+        .order_by(Letter.sent_at.desc())
+    )
+    return result.scalars().all()
+
+
+from fastapi import UploadFile, File
+import cloudinary
+import cloudinary.uploader
+from app.config import get_settings
+
+@router.post(
+    "/upload",
+    summary="Upload media to Cloudinary",
+)
+async def upload_media(file: UploadFile = File(...)):
+    """Uploads a file to Cloudinary and returns the secure URL."""
+    settings = get_settings()
+    if not settings.cloudinary_url:
+        raise HTTPException(status_code=500, detail="Cloudinary is not configured.")
+        
+    try:
+        # cloudinary package automatically uses CLOUDINARY_URL from env
+        result = cloudinary.uploader.upload(
+            file.file,
+            folder="letters_to_future",
+            resource_type="auto"
+        )
+        return {"url": result.get("secure_url")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 
 from pydantic import EmailStr
 from app.services.email_service import send_letter_email

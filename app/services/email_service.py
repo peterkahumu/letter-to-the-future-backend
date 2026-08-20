@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def _build_html(letter: Letter) -> str:
     """Build a beautiful HTML email for the letter."""
-    return f"""\
+    html = f"""\
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -74,11 +74,15 @@ def _build_html(letter: Letter) -> str:
                 <!-- Body -->
                 <tr>
                   <td style="padding:16px 30px 30px;">
-                    <div style="color:#D1D5DB;font-size:16px;line-height:1.7;white-space:pre-wrap;">
+                    <div style="color:#D1D5DB;font-size:16px;line-height:1.7;">
 {letter.body}
                     </div>
                   </td>
                 </tr>
+"""
+    
+    # Append the rest of the HTML
+    html += f"""
               </table>
             </td>
           </tr>
@@ -100,6 +104,19 @@ def _build_html(letter: Letter) -> str:
 </body>
 </html>"""
 
+    if letter.media_url:
+        media_html = f"""
+                <!-- Media Attachment -->
+                <tr>
+                  <td style="padding:0 30px 30px;text-align:center;">
+                    <img src="{letter.media_url}" alt="Attachment" style="max-width:100%;border-radius:8px;">
+                  </td>
+                </tr>
+"""
+        html = html.replace('<!-- Footer -->', media_html + '\n          <!-- Footer -->')
+    
+    return html
+
 
 def _build_plaintext(letter: Letter) -> str:
     """Build a plain-text fallback for the letter."""
@@ -111,6 +128,7 @@ def _build_plaintext(letter: Letter) -> str:
         f"Subject: {letter.subject}\n"
         f"{'-' * 40}\n\n"
         f"{letter.body}\n\n"
+        f"Media Attachment: {letter.media_url if letter.media_url else 'None'}\n\n"
         f"{'-' * 40}\n"
         f"This letter was scheduled on {letter.created_at.strftime('%B %d, %Y')} "
         f"for delivery today.\n"

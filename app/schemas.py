@@ -15,6 +15,9 @@ class LetterCreate(BaseModel):
     sender_name: str = Field(default="Past You", max_length=150)
     subject: str = Field(..., min_length=1, max_length=500)
     body: str = Field(..., min_length=1, max_length=50000)
+    media_url: str | None = Field(default=None, max_length=1000)
+    is_public: bool = False
+    is_anonymous: bool = True
     deliver_at: date
 
     @field_validator("deliver_at")
@@ -34,6 +37,9 @@ class LetterResponse(BaseModel):
     sender_name: str
     subject: str
     body: str
+    media_url: str | None
+    is_public: bool
+    is_anonymous: bool
     deliver_at: date
     is_sent: bool
     sent_at: datetime | None
@@ -48,6 +54,8 @@ class LetterStatusResponse(BaseModel):
     id: uuid.UUID
     recipient_email: str
     subject: str
+    is_public: bool
+    is_anonymous: bool
     deliver_at: date
     is_sent: bool
     sent_at: datetime | None

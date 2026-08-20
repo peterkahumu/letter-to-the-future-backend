@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     smtp_from_name: str
     frontend_url: str
     debug: bool
+    cloudinary_url: str | None = None
 
     @property
     def async_database_url(self) -> str:
