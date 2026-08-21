@@ -22,10 +22,12 @@ class LetterCreate(BaseModel):
 
     @field_validator("deliver_at")
     @classmethod
-    def delivery_must_be_future(cls, v: date) -> date:
+    def delivery_must_not_be_past(cls, v: date) -> date:
+        # Today is allowed: the hourly scheduler picks up anything due
+        # on or before the current UTC date, so it goes out this hour.
         from datetime import timezone, datetime as dt
-        if v <= dt.now(timezone.utc).date():
-            raise ValueError("Delivery date must be in the future.")
+        if v < dt.now(timezone.utc).date():
+            raise ValueError("Delivery date cannot be in the past.")
         return v
 
 

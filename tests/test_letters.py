@@ -46,29 +46,34 @@ async def test_create_letter_default_sender_name(client):
 
 @pytest.mark.asyncio
 async def test_create_letter_past_date_rejected(client):
-    """POST /api/letters rejects delivery dates in the past."""
+    """POST /api/letters rejects delivery dates before the current UTC date."""
+    utc_yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
     payload = {
         "recipient_email": "test@example.com",
         "subject": "Past date",
         "body": "Should fail.",
-        "deliver_at": (date.today() - timedelta(days=1)).isoformat(),
+        "deliver_at": utc_yesterday.isoformat(),
     }
     response = await client.post("/api/letters", json=payload)
     assert response.status_code == 422  # Validation error
 
 
 @pytest.mark.asyncio
-async def test_create_letter_today_date_rejected(client):
-    """POST /api/letters rejects today's date in UTC (must be future)."""
+async def test_create_letter_today_date_accepted(client):
+    """POST /api/letters accepts today's UTC date; the hourly scheduler sends it."""
     utc_today = datetime.now(timezone.utc).date()
     payload = {
         "recipient_email": "test@example.com",
         "subject": "Today date",
-        "body": "Should also fail.",
+        "body": "Should be delivered on the next scheduler run.",
         "deliver_at": utc_today.isoformat(),
     }
     response = await client.post("/api/letters", json=payload)
-    assert response.status_code == 422
+    assert response.status_code == 201
+
+    data = response.json()
+    assert data["deliver_at"] == utc_today.isoformat()
+    assert data["is_sent"] is False
 
 
 @pytest.mark.asyncio

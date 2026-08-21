@@ -69,3 +69,11 @@ app.add_middleware(
 # Routers
 app.include_router(health.router)
 app.include_router(letters.router)
+
+@app.get("/api/debug/cors")
+def get_cors_debug():
+    return {
+        "frontend_url": settings.frontend_url,
+        "allow_origins": [origin.strip().rstrip("/") for origin in settings.frontend_url.split(",")],
+        "allow_origin_regex": settings.allowed_origin_regex
+    }
