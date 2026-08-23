@@ -3,21 +3,42 @@ Shared test fixtures for the backend test suite.
 Uses an in-memory SQLite database to avoid needing PostgreSQL for tests.
 """
 
-import asyncio
+import os
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from unittest.mock import patch
+
+# Pin configuration BEFORE app modules are imported. Environment variables
+# outrank .env and .env.local in pydantic-settings, so this keeps the suite
+# independent of whatever a developer has configured locally.
+os.environ.update({
+    "DATABASE_URL": "postgresql+asyncpg://test:test@localhost:1/test",
+    "SECRET_KEY": "test-secret-key",
+    "EMAIL_PROVIDER": "console",
+    "DEBUG": "false",
+    "RUN_MIGRATIONS_ON_STARTUP": "false",
+    "RATE_LIMIT_CREATE": "5/hour",
+    "RATE_LIMIT_UPLOAD": "10/hour",
+    "RATE_LIMIT_REPORT": "20/hour",
+    "MAX_PENDING_PER_RECIPIENT": "20",
+    "MAX_DELIVERY_ATTEMPTS": "5",
+    "SCHEDULER_BATCH_SIZE": "100",
+    "FRONTEND_URL": "http://localhost:3000",
+    "SMTP_INSECURE": "false",
+})
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.core.limiter import limiter
+from app.core.security import hash_token
 from app.database import Base, get_db
 from app.main import app
-from app.models import Letter
+from app.models import Letter, LetterStatus
+from app.services.email_service import SendResult
 
-
-# In-memory SQLite for tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 test_engine = create_async_engine(TEST_DATABASE_URL, echo=False)
@@ -26,6 +47,27 @@ TestSessionLocal = async_sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
 )
+
+CONFIRM_TOKEN = "test-confirm-token-0123456789abcdef"
+MANAGE_TOKEN = "test-manage-token-0123456789abcdef"
+
+
+@pytest.fixture(autouse=True)
+def _no_rate_limits():
+    """Rate limits are per-IP and every test shares one — disable them here
+    and assert on them explicitly in the tests that care."""
+    limiter.enabled = False
+    yield
+    limiter.enabled = True
+
+
+@pytest.fixture(autouse=True)
+def _no_outbound_mail():
+    """Never touch SMTP from the suite."""
+    with patch(
+        "app.routers.letters.send_confirmation_email", return_value=SendResult(True)
+    ) as mock:
+        yield mock
 
 
 @pytest_asyncio.fixture
@@ -47,6 +89,7 @@ async def client(db_session: AsyncSession):
 
     async def _override_get_db():
         yield db_session
+        await db_session.commit()
 
     app.dependency_overrides[get_db] = _override_get_db
 
@@ -57,19 +100,38 @@ async def client(db_session: AsyncSession):
     app.dependency_overrides.clear()
 
 
-@pytest_asyncio.fixture
-async def sample_letter(db_session: AsyncSession) -> Letter:
-    """Insert a sample letter into the test database."""
-    letter = Letter(
+def _letter(**overrides) -> Letter:
+    base = dict(
         id=uuid.uuid4(),
         recipient_email="future@example.com",
         sender_name="Past Me",
         subject="Hello Future Me",
-        body="Remember to be kind to yourself.",
+        body="<p>Remember to be kind to yourself.</p>",
         deliver_at=date.today() + timedelta(days=30),
-        is_sent=False,
+        timezone_name="UTC",
+        status=LetterStatus.SCHEDULED,
+        confirm_token_hash=hash_token(CONFIRM_TOKEN),
+        manage_token_hash=hash_token(MANAGE_TOKEN),
         created_at=datetime.now(timezone.utc),
     )
+    base.update(overrides)
+    return Letter(**base)
+
+
+@pytest_asyncio.fixture
+async def sample_letter(db_session: AsyncSession) -> Letter:
+    """A confirmed letter scheduled well into the future."""
+    letter = _letter()
+    db_session.add(letter)
+    await db_session.commit()
+    await db_session.refresh(letter)
+    return letter
+
+
+@pytest_asyncio.fixture
+async def pending_letter(db_session: AsyncSession) -> Letter:
+    """A letter awaiting recipient confirmation."""
+    letter = _letter(status=LetterStatus.PENDING)
     db_session.add(letter)
     await db_session.commit()
     await db_session.refresh(letter)
@@ -78,16 +140,13 @@ async def sample_letter(db_session: AsyncSession) -> Letter:
 
 @pytest_asyncio.fixture
 async def due_letter(db_session: AsyncSession) -> Letter:
-    """Insert a letter that is due today in UTC (for scheduler tests)."""
-    utc_today = datetime.now(timezone.utc).date()
-    letter = Letter(
-        id=uuid.uuid4(),
+    """A confirmed letter due today in UTC (for scheduler tests)."""
+    letter = _letter(
         recipient_email="today@example.com",
         sender_name="Yesterday You",
         subject="Time has come",
         body="Today is the day!",
-        deliver_at=utc_today,
-        is_sent=False,
+        deliver_at=datetime.now(timezone.utc).date(),
         created_at=datetime.now(timezone.utc) - timedelta(days=7),
     )
     db_session.add(letter)

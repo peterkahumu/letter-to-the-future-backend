@@ -18,8 +18,14 @@ dependencies = [
     "fastapi-utilities>=0.2.0",
     "python-dotenv>=1.0.0",
     "cloudinary>=1.41.0",
-    "python-multipart>=0.0.30"
+    "python-multipart>=0.0.30",
+    "nh3>=0.2.18",
+    "slowapi>=0.1.9"
 ]
+
+[project.optional-dependencies]
+# Enabled at runtime only when SENTRY_DSN is set.
+monitoring = ["sentry-sdk[fastapi]>=2.0.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

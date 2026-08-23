@@ -27,8 +27,12 @@ settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.async_database_url)
 
 # Logging
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# `fileConfig` defaults to disable_existing_loggers=True, which silently
+# switches off every logger not named in alembic.ini — including all of the
+# app's own loggers. Keep them, and let a programmatic caller skip this
+# entirely by setting the `configure_logger` attribute.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Target metadata for autogenerate
 target_metadata = Base.metadata
