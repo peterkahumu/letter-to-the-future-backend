@@ -63,6 +63,7 @@ def _summary(entry: JournalEntry, journal_title: str | None = None) -> EntrySumm
         title=entry.title,
         excerpt=_excerpt(entry.body),
         entry_date=entry.entry_date,
+        entry_time=entry.entry_time,
         mood=entry.mood,
         updated_at=entry.updated_at,
     )
@@ -268,6 +269,7 @@ async def list_entries(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     search: str | None = Query(default=None, max_length=200),
+    mood: str | None = Query(default=None, max_length=30),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> EntryPage:
@@ -280,6 +282,8 @@ async def list_entries(
         base = base.where(
             JournalEntry.title.ilike(needle) | JournalEntry.body.ilike(needle)
         )
+    if mood:
+        base = base.where(JournalEntry.mood == mood.strip().lower())
 
     total = (
         await db.execute(select(func.count()).select_from(base.subquery()))
@@ -328,6 +332,7 @@ async def create_entry(
         # Same sanitizer as letter bodies (E4).
         body=sanitize_html(payload.body),
         entry_date=payload.entry_date or datetime.now(timezone.utc).date(),
+        entry_time=payload.entry_time,
         mood=_check_mood(payload.mood),
     )
     db.add(entry)
@@ -368,6 +373,8 @@ async def update_entry(
         entry.title = fields["title"].strip()
     if "entry_date" in fields and fields["entry_date"] is not None:
         entry.entry_date = fields["entry_date"]
+    if "entry_time" in fields:
+        entry.entry_time = fields["entry_time"]
     if "mood" in fields:
         entry.mood = _check_mood(fields["mood"])
 

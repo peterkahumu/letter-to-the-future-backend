@@ -6,7 +6,7 @@ been deployed and has clients — readable on its own.
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -228,6 +228,7 @@ class EntryCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=100000)
     # Defaults to today on the server when omitted.
     entry_date: date | None = None
+    entry_time: time | None = None
     mood: str | None = Field(default=None, max_length=30)
 
     @field_validator("title")
@@ -242,6 +243,7 @@ class EntryUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=300)
     body: str | None = Field(default=None, min_length=1, max_length=100000)
     entry_date: date | None = None
+    entry_time: time | None = None
     mood: str | None = Field(default=None, max_length=30)
 
 
@@ -251,6 +253,7 @@ class EntryResponse(BaseModel):
     title: str
     body: str
     entry_date: date
+    entry_time: time | None
     mood: str | None
     created_at: datetime
     updated_at: datetime
@@ -263,6 +266,7 @@ class EntryResponse(BaseModel):
             title=entry.title,
             body=entry.body,
             entry_date=entry.entry_date,
+            entry_time=entry.entry_time,
             mood=entry.mood,
             created_at=entry.created_at,
             updated_at=entry.updated_at,
@@ -281,6 +285,7 @@ class EntrySummary(BaseModel):
     title: str
     excerpt: str
     entry_date: date
+    entry_time: time | None
     mood: str | None
     updated_at: datetime
 
