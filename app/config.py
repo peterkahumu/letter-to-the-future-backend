@@ -53,8 +53,28 @@ class Settings(BaseSettings):
     # `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
     secret_key: str = "dev-only-insecure-key-change-me"
 
+    # --- Accounts -------------------------------------------------------
+    # Access tokens are bearer credentials held in the browser, so they are
+    # kept short and refreshed. Anything longer widens the window in which a
+    # leaked token still works.
+    access_token_expire_minutes: int = 60
+    refresh_token_expire_days: int = 30
+    password_reset_expire_minutes: int = 60
+    min_password_length: int = 10
+    # Signing up as this address grants the admin role on creation — how the
+    # first admin exists at all. Leave blank in an environment that already
+    # has one; promotion is an admin action from then on.
+    bootstrap_admin_email: str = ""
+    # Sign-ups need a verified address before letters or journals can be
+    # written. Off locally, where mail goes to the console.
+    require_email_verification: bool = True
+
     # --- Abuse limits ---------------------------------------------------
     rate_limit_create: str = "5/hour"
+    # Login is the one worth guarding hardest — this is the brute-force cap.
+    rate_limit_login: str = "10/hour"
+    rate_limit_register: str = "5/hour"
+    rate_limit_password_reset: str = "5/hour"
     rate_limit_upload: str = "10/hour"
     rate_limit_report: str = "20/hour"
     max_upload_bytes: int = 10 * 1024 * 1024

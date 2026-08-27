@@ -17,7 +17,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.config import get_settings
 from app.core.limiter import limiter
 from app.core.logging import configure_logging
-from app.routers import health, letters
+from app.routers import admin, auth, dashboard, health, journals, letters
 from app.services.scheduler import check_and_send_letters
 
 settings = get_settings()
@@ -152,4 +152,8 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(dashboard.router)
+app.include_router(journals.router)
 app.include_router(letters.router)
+app.include_router(admin.router)

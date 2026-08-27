@@ -62,3 +62,5 @@ websockets==17.0.1
 cloudinary==1.41.0
 nh3==0.3.6
 slowapi==0.1.10
+PyJWT==2.10.1
+bcrypt==4.2.1

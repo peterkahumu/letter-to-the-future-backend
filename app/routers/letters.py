@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.auth import get_optional_user
 from app.core.limiter import limiter
 from app.core.media import kind_from_content_type, resolve_kind
 from app.core.security import (
@@ -34,7 +35,7 @@ from app.core.security import (
     verify_unsubscribe_token,
 )
 from app.database import get_db
-from app.models import EmailSuppression, Letter, LetterReport, LetterStatus
+from app.models import EmailSuppression, Letter, LetterReport, LetterStatus, User
 from app.schemas import (
     LetterCreate,
     LetterCreatedResponse,
@@ -98,12 +99,19 @@ async def create_letter(
     payload: LetterCreate,
     background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    author: User | None = Depends(get_optional_user),
 ) -> LetterCreatedResponse:
     """
     Record a letter and email the recipient a confirmation link.
 
     Nothing is scheduled until that link is clicked (P1) — this is what stops
     the service being used to mail people who never asked for it.
+
+    Signing in is optional here on purpose. A signed-in writer gets the
+    letter attached to their account so it shows up in their dashboard; a
+    guest gets exactly the flow that existed before accounts did. Either
+    way the letter is sealed once confirmed — ownership decides who can
+    *see* it listed, never who can rewrite it (E6).
     """
     settings = get_settings()
     email = str(payload.recipient_email)
@@ -138,6 +146,7 @@ async def create_letter(
     manage_token = new_token()
 
     letter = Letter(
+        user_id=author.id if author else None,
         recipient_email=email,
         sender_name=payload.sender_name,
         subject=payload.subject,
