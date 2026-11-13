@@ -25,6 +25,14 @@ os.environ.update({
     "SCHEDULER_BATCH_SIZE": "100",
     "FRONTEND_URL": "http://localhost:3000",
     "SMTP_INSECURE": "false",
+    # Accounts: verification off so fixtures can sign in directly, and a
+    # short password floor so test passwords stay readable.
+    "REQUIRE_EMAIL_VERIFICATION": "false",
+    "MIN_PASSWORD_LENGTH": "8",
+    "BOOTSTRAP_ADMIN_EMAIL": "",
+    "RATE_LIMIT_LOGIN": "100/hour",
+    "RATE_LIMIT_REGISTER": "100/hour",
+    "RATE_LIMIT_PASSWORD_RESET": "100/hour",
 })
 
 import pytest
@@ -33,10 +41,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.limiter import limiter
+from app.core.auth import create_access_token, hash_password
 from app.core.security import hash_token
 from app.database import Base, get_db
 from app.main import app
-from app.models import Letter, LetterStatus
+from app.models import Journal, JournalEntry, Letter, LetterStatus, User, UserRole
 from app.services.email_service import SendResult
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -153,3 +162,93 @@ async def due_letter(db_session: AsyncSession) -> Letter:
     await db_session.commit()
     await db_session.refresh(letter)
     return letter
+
+
+# --- Accounts -----------------------------------------------------------
+
+TEST_PASSWORD = "correct-horse-battery"
+
+
+def _user(**overrides) -> User:
+    base = dict(
+        id=uuid.uuid4(),
+        email="writer@example.com",
+        password_hash=hash_password(TEST_PASSWORD),
+        display_name="Writer",
+        role=UserRole.USER,
+        is_active=True,
+        is_verified=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    base.update(overrides)
+    return User(**base)
+
+
+@pytest_asyncio.fixture
+async def user(db_session: AsyncSession) -> User:
+    """An ordinary verified account."""
+    row = _user()
+    db_session.add(row)
+    await db_session.commit()
+    await db_session.refresh(row)
+    return row
+
+
+@pytest_asyncio.fixture
+async def other_user(db_session: AsyncSession) -> User:
+    """A second account — the one that must never see the first's writing."""
+    row = _user(email="someone.else@example.com", display_name="Someone Else")
+    db_session.add(row)
+    await db_session.commit()
+    await db_session.refresh(row)
+    return row
+
+
+@pytest_asyncio.fixture
+async def admin_user(db_session: AsyncSession) -> User:
+    """An admin. Also a user — same table, same rights, wider role."""
+    row = _user(email="admin@example.com", display_name="Admin", role=UserRole.ADMIN)
+    db_session.add(row)
+    await db_session.commit()
+    await db_session.refresh(row)
+    return row
+
+
+def auth_header(user: User) -> dict[str, str]:
+    """Bearer header for a user, minted the same way login does."""
+    return {"Authorization": f"Bearer {create_access_token(user)}"}
+
+
+@pytest_asyncio.fixture
+async def journal(db_session: AsyncSession, user: User) -> Journal:
+    row = Journal(
+        user_id=user.id,
+        title="Travel 2026",
+        description="Where I went and what it was like.",
+        color="turquoise",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db_session.add(row)
+    await db_session.commit()
+    await db_session.refresh(row)
+    return row
+
+
+@pytest_asyncio.fixture
+async def entry(db_session: AsyncSession, journal: Journal) -> JournalEntry:
+    row = JournalEntry(
+        journal_id=journal.id,
+        user_id=journal.user_id,
+        title="Landed in Nairobi",
+        body="<p>The air smelled like rain on hot tarmac.</p>",
+        entry_date=date.today(),
+        mood="excited",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db_session.add(row)
+    await db_session.commit()
+    await db_session.refresh(row)
+    return row
